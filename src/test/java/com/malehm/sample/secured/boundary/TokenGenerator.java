@@ -1,9 +1,6 @@
 package com.malehm.sample.secured.boundary;
 
-import java.security.Key;
 import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.util.Base64;
 import java.util.Set;
 import java.util.UUID;
 import org.keycloak.TokenIdGenerator;
@@ -21,39 +18,21 @@ import com.nimbusds.jwt.SignedJWT;
 public class TokenGenerator {
 
   private static String ISSUER = "http://localhost:8080/auth/realms/application";
-  private final KeyPair keyPair;
+  private final KeyStore keyStore;
 
   public TokenGenerator() {
-    try {
-      final KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-      kpg.initialize(2048);
-      this.keyPair = kpg.generateKeyPair();
-    } catch (final Exception ex) {
-      throw new RuntimeException("Exception creating keyPair", ex);
-    }
-  }
-
-  public String getPublicKey() {
-    return this.toString(this.keyPair.getPublic());
-  }
-
-  public String getPrivateKey() {
-    return this.toString(this.keyPair.getPrivate());
-  }
-
-  private String toString(final Key key) {
-    return Base64.getEncoder().encodeToString(key.getEncoded());
+    this.keyStore = KeyStore.fromFile();
   }
 
   public String createToken(final AccessToken token) {
-    return this.createToken(this.keyPair, token);
+    return this.createToken(this.keyStore.getKeyPair(), token);
   }
 
   public String createToken(final String resource, final String issuedFor, final String username,
       final Set<String> roles) {
     final AccessToken accessToken =
         this.createAccessToken(resource, issuedFor, resource, roles, username);
-    return this.createToken(this.keyPair, accessToken);
+    return this.createToken(this.keyStore.getKeyPair(), accessToken);
   }
 
   private AccessToken createAccessToken(final String audience, final String issuedFor,
