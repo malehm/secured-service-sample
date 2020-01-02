@@ -1,6 +1,9 @@
 package com.malehm.sample.secured.boundary;
 
+import java.security.Key;
 import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.util.Base64;
 import java.util.Set;
 import java.util.UUID;
 import org.keycloak.TokenIdGenerator;
@@ -18,11 +21,39 @@ import com.nimbusds.jwt.SignedJWT;
 public class TokenGenerator {
 
   private static String ISSUER = "http://localhost:8080/auth/realms/application";
+  private final KeyPair keyPair;
 
-  public String createToken(final KeyPair pair) throws Exception {
-    final AccessToken accessToken = this.createAccessToken("service", "service-client", "service",
-        Set.of("reader"), "username");
-    return this.createToken(pair, accessToken);
+  public TokenGenerator() {
+    try {
+      final KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+      kpg.initialize(2048);
+      this.keyPair = kpg.generateKeyPair();
+    } catch (final Exception ex) {
+      throw new RuntimeException("Exception creating keyPair", ex);
+    }
+  }
+
+  public String getPublicKey() {
+    return this.toString(this.keyPair.getPublic());
+  }
+
+  public String getPrivateKey() {
+    return this.toString(this.keyPair.getPrivate());
+  }
+
+  private String toString(final Key key) {
+    return Base64.getEncoder().encodeToString(key.getEncoded());
+  }
+
+  public String createToken(final AccessToken token) {
+    return this.createToken(this.keyPair, token);
+  }
+
+  public String createToken(final String resource, final String issuedFor, final String username,
+      final Set<String> roles) {
+    final AccessToken accessToken =
+        this.createAccessToken(resource, issuedFor, resource, roles, username);
+    return this.createToken(this.keyPair, accessToken);
   }
 
   private AccessToken createAccessToken(final String audience, final String issuedFor,
@@ -39,17 +70,20 @@ public class TokenGenerator {
     return jwt;
   }
 
-  private String createToken(final KeyPair pair, final AccessToken accessToken) throws Exception {
-    final JWSHeader header =
-        new JWSHeader.Builder(JWSAlgorithm.RS256).keyID("jwt.key").type(JOSEObjectType.JWT).build();
+  private String createToken(final KeyPair pair, final AccessToken accessToken) {
+    try {
+      final JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256).keyID("jwt.key")
+          .type(JOSEObjectType.JWT).build();
+      final JWTClaimsSet claimsSet =
+          JWTClaimsSet.parse(new ObjectMapper().writeValueAsString(accessToken));
+      final SignedJWT signedJWT = new SignedJWT(header, claimsSet);
+      final JWSSigner signer = new RSASSASigner(pair.getPrivate());
+      signedJWT.sign(signer);
 
-    final JWTClaimsSet claimsSet =
-        JWTClaimsSet.parse(new ObjectMapper().writeValueAsString(accessToken));
-    final SignedJWT signedJWT = new SignedJWT(header, claimsSet);
-    final JWSSigner signer = new RSASSASigner(pair.getPrivate());
-    signedJWT.sign(signer);
-
-    return signedJWT.serialize();
+      return signedJWT.serialize();
+    } catch (final Exception ex) {
+      throw new RuntimeException("Exception creating token", ex);
+    }
   }
 
 }
